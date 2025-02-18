@@ -1,35 +1,85 @@
+"use client";
 import type React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Bell, ChevronDown, Search } from "lucide-react";
-import CartIcon from "@/components/CartIcon";
+import { Bell, ChevronDown, LogOut, Search, ShoppingCart } from "lucide-react";
+import { useRouter } from "next/navigation"; // ✅ Correct for Next.js App Router
+
+import { useEffect, useState } from "react";
 
 export default function ProductLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const router = useRouter();
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+    setIsLoggedIn(!!token);
+  }, []);
+  const handleLogout = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    setIsLoggedIn(false);
+    router.push("/signin");
+  };
   return (
     <div className="min-h-screen bg-white">
       {/* Top Navigation */}
-      <div className="border-b">
-        <div className="container mx-auto flex items-center justify-between py-2 text-sm px-4">
+      <div className="border-b bg-gray-50">
+        <div className="container mx-auto px-4 flex items-center justify-between py-3 text-sm">
           <div className="flex items-center gap-4">
-            <span>
-              Hi!{" "}
-              <Link href="/signin" className="text-blue-600 hover:underline">
-                Sign in
-              </Link>{" "}
-              or{" "}
-              <Link href="/register" className="text-blue-600 hover:underline">
-                register
+            {isLoggedIn ? (
+              <span>
+                Welcome back!{" "}
+                <button
+                  onClick={handleLogout}
+                  className="text-blue-600 hover:underline flex items-center"
+                >
+                  Logout <LogOut className="h-4 w-4 ml-1" />
+                </button>
+              </span>
+            ) : (
+              <span>
+                Hi!{" "}
+                <Link href="/signin" className="text-blue-600 hover:underline">
+                  Sign in
+                </Link>{" "}
+                or{" "}
+                <Link
+                  href="/register"
+                  className="text-blue-600 hover:underline"
+                >
+                  register
+                </Link>
+              </span>
+            )}
+            <nav className="hidden md:flex items-center gap-6">
+              <Link
+                href="/daily-deals"
+                className="hover:text-blue-600 transition-colors"
+              >
+                Daily Deals
               </Link>
-            </span>
-            <nav className="hidden md:flex items-center gap-4">
-              <Link href="/daily-deals">Daily Deals</Link>
-              <Link href="/brand-outlet">Brand Outlet</Link>
-              <Link href="/gift-cards">Gift Cards</Link>
-              <Link href="/help">Help & Contact</Link>
+              <Link
+                href="/brand-outlet"
+                className="hover:text-blue-600 transition-colors"
+              >
+                Brand Outlet
+              </Link>
+              <Link
+                href="/gift-cards"
+                className="hover:text-blue-600 transition-colors"
+              >
+                Gift Cards
+              </Link>
+              <Link
+                href="/help"
+                className="hover:text-blue-600 transition-colors"
+              >
+                Help & Contact
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-4">
@@ -40,8 +90,8 @@ export default function ProductLayout({
               <ChevronDown className="h-4 w-4" />
             </Link>
             <div className="flex items-center gap-4">
-              <Bell className="h-5 w-5 cursor-pointer" />
-              <CartIcon />
+              <Bell className="h-5 w-5" />
+              <ShoppingCart className="h-5 w-5" />
             </div>
           </div>
         </div>

@@ -1,35 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Expand, Heart, Star } from "lucide-react";
-
-// Mock product data - replace with real data fetching
-const product = {
-  id: "1",
-  title:
-    "Vtg 1980's NOS Converse All Star Hi-Top Camo Sneakers Made In USA 🇺🇸 Sz 7",
-  price: {
-    usd: 225.0,
-    vnd: "5,752,575.00",
-  },
-  shipping: {
-    usd: 107.63,
-    vnd: "2,751,774.21",
-  },
-  seller: {
-    name: "nostalgia-on-wheels",
-    rating: "100% positive",
-    location: "Fountain Valley, CA, United States",
-  },
-  condition: "New",
-  watching: 13,
-  images: Array(6).fill("/placeholder.svg"),
-  delivery: {
-    start: "Thu, Mar 27",
-    end: "Mon, Apr 21",
-  },
-};
-
+import { AddToCartButton } from "./add-to-cart";
 const similarProducts = [
   {
     id: "2",
@@ -86,17 +58,33 @@ const sellerInfo = {
     ],
   },
 };
+async function getProductData(category: string, id: string) {
+  const apiUrl = process.env.API_URL || "http://127.0.0.1:8000";
+  const pluralCategory = category.endsWith("s") ? category : `${category}s`;
+  const res = await fetch(`${apiUrl}/products/${pluralCategory}/${id}`, {
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch product data");
+  }
+  return res.json();
+}
 
-// Add AddToCartButton component here (you'll need to define this component elsewhere)
-const AddToCartButton = () => {
-  return (
-    <button className="w-full border border-black py-3 rounded-full hover:bg-gray-100">
-      Add to cart
-    </button>
-  );
-};
+export default async function ProductDetail({
+  params,
+}: {
+  params: { category: string; id: string };
+}) {
+  const product = await getProductData(params.category, params.id);
 
-export default function ProductDetail() {
+  // Helper function to format price
+  const formatPrice = (price: string) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(Number.parseFloat(price));
+  };
+
   return (
     <div className="container mx-auto px-4 py-6">
       {/* Breadcrumb */}
@@ -106,27 +94,13 @@ export default function ProductDetail() {
         </Link>
         <span className="text-gray-400">›</span>
         <Link
-          href="/products/clothing"
-          className="text-gray-600 hover:underline"
+          href={`/products/${params.category}`}
+          className="text-gray-600 hover:underline capitalize"
         >
-          Clothing, Shoes & Accessories
+          {params.category}
         </Link>
         <span className="text-gray-400">›</span>
-        <Link
-          href="/products/specialty"
-          className="text-gray-600 hover:underline"
-        >
-          Specialty
-        </Link>
-        <span className="text-gray-400">›</span>
-        <Link
-          href="/products/vintage"
-          className="text-gray-600 hover:underline"
-        >
-          Vintage
-        </Link>
-        <span className="text-gray-400">›</span>
-        <span className="text-gray-800">Men&apos;s Vintage Shoes</span>
+        <span className="text-gray-800">{product.name}</span>
       </div>
 
       {/* Product Section */}
@@ -135,15 +109,15 @@ export default function ProductDetail() {
         <div className="space-y-4">
           <div className="relative">
             <div className="absolute top-2 left-2 bg-red-600 text-white text-xs px-2 py-1 rounded">
-              41 VIEWED IN THE LAST 24 HOURS
+              {product.stock} in stock
             </div>
             <button className="absolute top-2 right-2 p-2 bg-white rounded-full shadow-md">
               <Expand className="w-5 h-5" />
             </button>
             <div className="relative aspect-square">
               <Image
-                src={product.images[0] || "/placeholder.svg"}
-                alt={product.title}
+                src={"/placeholder.svg"}
+                alt={product.name}
                 fill
                 className="object-cover rounded-lg"
               />
@@ -156,13 +130,13 @@ export default function ProductDetail() {
             </button>
           </div>
           <div className="grid grid-cols-6 gap-2">
-            {product.images.map((image, i) => (
+            {product.images.map((image: string, i: number) => (
               <button
                 key={i}
                 className="aspect-square relative border rounded-md overflow-hidden hover:border-blue-600"
               >
                 <Image
-                  src={image || "/placeholder.svg"}
+                  src={"/placeholder.svg"}
                   alt={`Product view ${i + 1}`}
                   fill
                   className="object-cover"
@@ -175,38 +149,21 @@ export default function ProductDetail() {
         {/* Product Info */}
         <div>
           <div className="flex items-start justify-between gap-4">
-            <h1 className="text-2xl font-semibold">{product.title}</h1>
+            <h1 className="text-2xl font-semibold">{product.name}</h1>
             <div className="flex items-center gap-2">
               <button className="p-2 hover:bg-gray-100 rounded-full">
                 <Expand className="w-5 h-5" />
               </button>
               <div className="flex items-center gap-1">
-                <span>{product.watching}</span>
+                <span>{product.stock}</span>
                 <Heart className="w-5 h-5" />
               </div>
             </div>
           </div>
 
           <div className="mt-6">
-            <div className="flex items-center gap-2">
-              <div className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center text-sm">
-                N
-              </div>
-              <Link href="#" className="text-sm hover:underline">
-                {product.seller.name}
-              </Link>
-              <span className="text-sm text-blue-600 hover:underline cursor-pointer">
-                {product.seller.rating}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-6">
             <div className="text-2xl font-bold">
-              US ${product.price.usd.toFixed(2)}
-            </div>
-            <div className="text-sm text-gray-500">
-              Approx {product.price.vnd} VND
+              {formatPrice(product.price)}
             </div>
           </div>
 
@@ -215,19 +172,12 @@ export default function ProductDetail() {
               Buy It Now
             </button>
             <AddToCartButton
-            //   product={{
-            //     id: product.id,
-            //     title: product.title,
-            //     price: product.price.usd,
-            //     image: product.images[0],
-            //     seller: {
-            //       name: product.seller.name,
-            //       rating: product.seller.rating,
-            //     },
-            //     shipping: {
-            //       cost: product.shipping.usd,
-            //     },
-            //   }}
+              product={{
+                id: product.id.toString(),
+                name: product.name,
+                price: Number(product.price),
+                image: product.images[0] || "/placeholder.svg",
+              }}
             />
             <button className="w-full border py-3 rounded-full hover:bg-gray-100">
               ❤ Add to Watchlist
@@ -237,69 +187,90 @@ export default function ProductDetail() {
           <div className="mt-6 space-y-4">
             <div className="border-t pt-4">
               <div className="flex justify-between text-sm">
-                <span>Shipping:</span>
-                <div className="text-right">
-                  <div>
-                    US ${product.shipping.usd} (Approx {product.shipping.vnd}{" "}
-                    VND)
+                <span>Stock:</span>
+                <div>{product.stock}</div>
+              </div>
+            </div>
+
+            {params.category === "books" && (
+              <>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Author:</span>
+                    <div>{product.author}</div>
                   </div>
-                  <div className="text-blue-600 hover:underline cursor-pointer">
-                    eBay International Shipping
+                </div>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Publisher:</span>
+                    <div>{product.publisher}</div>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <div className="flex justify-between text-sm">
-                <span>Delivery:</span>
-                <div className="text-right">
-                  Estimated between {product.delivery.start} and{" "}
-                  {product.delivery.end}
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>ISBN:</span>
+                    <div>{product.isbn}</div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
 
-            <div className="border-t pt-4">
-              <div className="flex justify-between text-sm">
-                <span>Returns:</span>
-                <div className="text-right">
-                  30 days returns. Buyer pays for return shipping.
+            {params.category === "clothes" && (
+              <>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Size:</span>
+                    <div>{product.size}</div>
+                  </div>
                 </div>
-              </div>
-            </div>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Color:</span>
+                    <div>{product.color}</div>
+                  </div>
+                </div>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Material:</span>
+                    <div>{product.material}</div>
+                  </div>
+                </div>
+              </>
+            )}
 
-            <div className="border-t pt-4">
-              <div className="flex justify-between text-sm">
-                <span>Payments:</span>
-                <div className="flex gap-2">
-                  <Image
-                    src="/placeholder.svg"
-                    alt="PayPal"
-                    width={40}
-                    height={24}
-                    className="h-6 w-auto"
-                  />
-                  <Image
-                    src="/placeholder.svg"
-                    alt="Visa"
-                    width={40}
-                    height={24}
-                    className="h-6 w-auto"
-                  />
-                  <Image
-                    src="/placeholder.svg"
-                    alt="Mastercard"
-                    width={40}
-                    height={24}
-                    className="h-6 w-auto"
-                  />
+            {params.category === "phones" && (
+              <>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Brand:</span>
+                    <div>{product.brand}</div>
+                  </div>
                 </div>
-              </div>
-            </div>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Model:</span>
+                    <div>{product.model}</div>
+                  </div>
+                </div>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>Storage:</span>
+                    <div>{product.storage}</div>
+                  </div>
+                </div>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span>RAM:</span>
+                    <div>{product.ram}</div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Item Description */}
 
       {/* Item Specifics & Description */}
       <section className="mt-12 border-t pt-8">

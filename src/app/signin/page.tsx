@@ -1,7 +1,72 @@
+"use client";
+
+import type React from "react";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export default function SignIn() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      router.push("/");
+    }
+  }, [router]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      const loginResponse = await fetch(`${apiUrl}/api/login/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!loginResponse.ok) {
+        throw new Error("Login failed");
+      }
+
+      const loginData = await loginResponse.json();
+      localStorage.setItem("accessToken", loginData.tokens.access);
+      localStorage.setItem("refreshToken", loginData.tokens.refresh);
+      localStorage.setItem("customer", JSON.stringify(loginData.customer));
+
+      // Create cart for the user
+      const cartResponse = await fetch(`${apiUrl}/cart/carts/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${loginData.tokens.access}`,
+        },
+        body: JSON.stringify({ customer: loginData.customer.id }),
+      });
+
+      if (!cartResponse.ok) {
+        console.error("Failed to create cart");
+        setError("Failed to create cart. Please try again or contact support.");
+      } else {
+        const cartData = await cartResponse.json();
+        localStorage.setItem("cart", JSON.stringify(cartData));
+        router.push("/");
+      }
+    } catch (err) {
+      setError("Invalid email or password. Please try again." + err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <div className="p-4">
@@ -29,16 +94,40 @@ export default function SignIn() {
           </p>
         </div>
 
-        <form className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div
+              className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
+              role="alert"
+            >
+              <span className="block sm:inline">{error}</span>
+            </div>
+          )}
           <div>
             <input
               type="text"
               placeholder="Email or username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              required
+            />
+          </div>
+          <div>
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              required
             />
           </div>
 
-          <button className="w-full bg-blue-600 text-white py-3 rounded-full hover:bg-blue-700 transition-colors">
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white py-3 rounded-full hover:bg-blue-700 transition-colors"
+          >
             Continue
           </button>
         </form>
@@ -80,17 +169,6 @@ export default function SignIn() {
             />
             Continue with Apple
           </button>
-        </div>
-
-        <div className="mt-6 flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="stay-signed-in"
-            className="rounded border-gray-300"
-          />
-          <label htmlFor="stay-signed-in" className="text-sm">
-            Stay signed in
-          </label>
         </div>
       </main>
 

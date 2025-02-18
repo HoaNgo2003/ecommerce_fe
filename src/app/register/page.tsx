@@ -1,7 +1,80 @@
+"use client";
+
+import type React from "react";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export default function Register() {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      router.push("/");
+    }
+  }, [router]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError("");
+
+    if (!username || !email || !password) {
+      setError("All fields are required");
+      return;
+    }
+
+    try {
+      const registerResponse = await fetch(`${apiUrl}/api/register/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      if (!registerResponse.ok) {
+        throw new Error("Registration failed");
+      }
+
+      const registerData = await registerResponse.json();
+      localStorage.setItem("accessToken", registerData.tokens.access);
+      localStorage.setItem("refreshToken", registerData.tokens.refresh);
+      localStorage.setItem("customer", JSON.stringify(registerData.customer));
+
+      // Create cart for the new user
+      const cartResponse = await fetch(`${apiUrl}/cart/carts/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${registerData.tokens.access}`,
+        },
+        body: JSON.stringify({ customer: registerData.customer.id }),
+      });
+
+      if (!cartResponse.ok) {
+        console.error("Failed to create cart");
+        setError(
+          "Registration successful, but failed to create cart. Please try logging in or contact support."
+        );
+      } else {
+        const cartData = await cartResponse.json();
+        localStorage.setItem("cart", JSON.stringify(cartData));
+        router.push("/");
+      }
+    } catch (err) {
+      setError("Registration failed. Please try again." + err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <div className="p-4">
@@ -31,38 +104,43 @@ export default function Register() {
           <div className="max-w-[460px]">
             <div className="mb-8">
               <h1 className="text-2xl font-semibold mb-6">Create an account</h1>
-              <div className="inline-flex rounded-full p-1 bg-gray-100">
-                <button className="px-6 py-2 rounded-full bg-black text-white">
-                  Personal
-                </button>
-                <button className="px-6 py-2 rounded-full text-gray-600">
-                  Business
-                </button>
-              </div>
             </div>
 
-            <form className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  placeholder="First name"
-                  className="px-4 py-3 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-                <input
-                  type="text"
-                  placeholder="Last name"
-                  className="px-4 py-3 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                />
+            {error && (
+              <div
+                className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+                role="alert"
+              >
+                <span className="block sm:inline">{error}</span>
               </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <input
+                type="text"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-3 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                required
+              />
+
               <input
                 type="email"
                 placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                required
               />
+
               <input
                 type="password"
                 placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                required
               />
 
               <p className="text-xs text-gray-600">
@@ -80,7 +158,10 @@ export default function Register() {
                 .
               </p>
 
-              <button className="w-full bg-gray-300 text-gray-700 py-3 rounded-full hover:bg-gray-400 transition-colors">
+              <button
+                type="submit"
+                className="w-full bg-blue-600 text-white py-3 rounded-full hover:bg-blue-800 transition-colors"
+              >
                 Create personal account
               </button>
             </form>
