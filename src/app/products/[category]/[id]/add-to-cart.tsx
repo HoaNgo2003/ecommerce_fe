@@ -41,7 +41,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          product_id: Number(product.id),
+          product_id: product.id,
           quantity: 1,
           cart_id: cartData.id,
         }),

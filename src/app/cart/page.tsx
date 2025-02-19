@@ -1,54 +1,138 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Bell, ChevronDown, Info, Search, ShoppingCart } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Search } from "lucide-react";
+import { CartItem } from "./cart-item";
+import { CartSummary } from "./cart-summary";
+import { CartIcon } from "@/components/CartIcon";
+import { useRouter } from "next/navigation";
 
-// Mock cart data - replace with real data fetching
-const cartItem = {
-  seller: {
-    name: "St Luke Gardens-Anthropology Store",
-    rating: "100% positive feedback",
-    image: "/placeholder.svg",
-  },
-  product: {
-    title:
-      "Men's Vintage Nike All Court Shoes 8.5 Made In Taiwan 80s Canvas Blue Prop",
-    price: 300.0,
-    shipping: 99.89,
-    image: "/placeholder.svg",
-    isLastOne: true,
-  },
-};
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-const relatedItems = [
-  {
-    title:
-      "Vintage 80s Adidas Boston Running Shoes Womens 9 Rare Taiwan Original",
-    price: "3,323,454.00 VND",
-    image: "/placeholder.svg",
-  },
-  {
-    title:
-      "Deadstock Vintage 1994 Nike Wimbledon Classic II Tennis 9 US Shoe Sneaker",
-    price: "15,283,697.00 VND",
-    image: "/placeholder.svg",
-  },
-  {
-    title: "Nike Court Vintage Pants Gray Made in Taiwan Polyester Mens Size L",
-    price: "1,431,496.00 VND",
-    image: "/placeholder.svg",
-  },
-  {
-    title: "Converse All Star Made in USA 1980's NEW! TEALSYELLOW (10 US)",
-    price: "9,510,924.00 VND",
-    image: "/placeholder.svg",
-  },
-];
+interface CartData {
+  id: string;
+  items: {
+    id: string;
+    quantity: number;
+    product_details: {
+      name: string;
+      price: number;
+      description: string;
+      images: string[];
+    };
+    price_item: string;
+  }[];
+  created_at: string;
+  customer: string;
+  total_price: number;
+}
 
 export default function CartPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [cartData, setCartData] = useState<CartData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+    setIsLoggedIn(!!token);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    setIsLoggedIn(false);
+    router.push("/signin");
+  };
+  useEffect(() => {
+    fetchCartData();
+  }, []);
+
+  const fetchCartData = async () => {
+    setIsLoading(true);
+    setError(null);
+    const cart = localStorage.getItem("cart");
+    const parsedCart: { id: string } | null = cart ? JSON.parse(cart) : null;
+    const { id } = parsedCart || {};
+    if (!id) {
+      setError("No cart found. Please add items to your cart.");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/cart/carts/${id}/`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch cart data");
+      }
+
+      const data: CartData = await response.json();
+      setCartData(data);
+    } catch (err) {
+      setError("Failed to load cart data. Please try again." + err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  console.log(cartData);
+  const handleUpdateQuantity = async (itemId: string, newQuantity: number) => {
+    if (!cartData) return;
+
+    try {
+      const response = await fetch(`${apiUrl}/cart/cart-items/${itemId}/`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+        },
+        body: JSON.stringify({
+          cart_id: cartData.id,
+          product_id: itemId,
+          quantity: newQuantity,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update cart item");
+      }
+
+      // Refresh cart data after successful update
+      await fetchCartData();
+    } catch (error) {
+      console.error("Error updating cart item:", error);
+      setError("Failed to update cart item. Please try again.");
+    }
+  };
+
+  const handleRemoveItem = async (itemId: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/cart/cart-items/${itemId}/`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to remove cart item");
+      }
+
+      // Refresh cart data after successful removal
+      await fetchCartData();
+    } catch (error) {
+      console.error("Error removing cart item:", error);
+      setError("Failed to remove cart item. Please try again.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -56,16 +140,31 @@ export default function CartPage() {
       <div className="border-b bg-gray-50">
         <div className="container mx-auto px-4 flex items-center justify-between py-3 text-sm">
           <div className="flex items-center gap-4">
-            <span>
-              Hi!{" "}
-              <Link href="/signin" className="text-blue-600 hover:underline">
-                Sign in
-              </Link>{" "}
-              or{" "}
-              <Link href="/register" className="text-blue-600 hover:underline">
-                register
-              </Link>
-            </span>
+            {isLoggedIn ? (
+              <span>
+                Welcome back!{" "}
+                <button
+                  onClick={handleLogout}
+                  className="text-blue-600 hover:underline flex items-center"
+                >
+                  Logout <LogOut className="h-4 w-4 ml-1" />
+                </button>
+              </span>
+            ) : (
+              <span>
+                Hi!{" "}
+                <Link href="/signin" className="text-blue-600 hover:underline">
+                  Sign in
+                </Link>{" "}
+                or{" "}
+                <Link
+                  href="/register"
+                  className="text-blue-600 hover:underline"
+                >
+                  register
+                </Link>
+              </span>
+            )}
             <nav className="hidden md:flex items-center gap-6">
               <Link
                 href="/daily-deals"
@@ -94,15 +193,15 @@ export default function CartPage() {
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/ship-to">Ship to</Link>
+            <Link href="/order-tracking">Order list</Link>
             <Link href="/sell">Sell</Link>
             <Link href="/watchlist" className="flex items-center gap-1">
               Watchlist
               <ChevronDown className="h-4 w-4" />
             </Link>
             <div className="flex items-center gap-4">
-              <Bell className="h-5 w-5 cursor-pointer" />
-              <ShoppingCart className="h-5 w-5 cursor-pointer" />
+              <Bell className="h-5 w-5" />
+              <CartIcon />
             </div>
           </div>
         </div>
@@ -124,9 +223,9 @@ export default function CartPage() {
             <div className="flex flex-1 items-center gap-4">
               <select className="w-[200px] h-11 border rounded-md px-3">
                 <option value="all">All Categories</option>
-                <option value="electronics">Electronics</option>
-                <option value="fashion">Fashion</option>
-                <option value="home">Home & Garden</option>
+                <option value="books">Books</option>
+                <option value="phones">Phones</option>
+                <option value="clothes">Clothes</option>
               </select>
               <div className="flex flex-1 items-center">
                 <input
@@ -150,23 +249,10 @@ export default function CartPage() {
       {/* Category Navigation */}
       <nav className="border-b bg-white">
         <div className="container mx-auto px-4 flex items-center gap-8 overflow-x-auto py-4 text-sm">
-          {[
-            "Explore",
-            "Saved",
-            "Electronics",
-            "Motors",
-            "Fashion",
-            "Collectibles and Art",
-            "Sports",
-            "Health & Beauty",
-            "Industrial equipment",
-            "Home & Garden",
-            "Deals",
-            "Sell",
-          ].map((category) => (
+          {["Books", "Phones", "Clothes"].map((category) => (
             <Link
               key={category}
-              href={`/${category.toLowerCase()}`}
+              href={`products/${category.toLowerCase()}`}
               className="shrink-0 hover:text-blue-600 transition-colors"
             >
               {category}
@@ -186,181 +272,31 @@ export default function CartPage() {
           </Link>
         </div>
 
-        {/* Sign in notification */}
-        <div className="bg-blue-600 text-white p-4 rounded-md mb-6 flex items-center gap-2">
-          <span>
-            You&apos;re signed out right now. To save these items or see your
-            previously saved items,
-          </span>
-          <Link href="/signin" className="underline font-medium">
-            sign in
-          </Link>
-          .
-        </div>
+        {isLoading && <p>Loading cart data...</p>}
+        {error && <p className="text-red-500">{error}</p>}
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Cart Items */}
-          <div className="lg:col-span-2">
-            <div className="border rounded-lg p-6">
-              {/* Seller Info */}
-              <div className="flex items-center gap-3 mb-6">
-                <Image
-                  src={cartItem.seller.image || "/placeholder.svg"}
-                  alt={cartItem.seller.name}
-                  width={40}
-                  height={40}
-                  className="rounded-full"
+        {cartData && (
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Cart Items */}
+            <div className="lg:col-span-2">
+              {cartData.items.map((item) => (
+                <CartItem
+                  key={item.id}
+                  item={item}
+                  onUpdateQuantity={handleUpdateQuantity}
+                  onRemoveItem={handleRemoveItem}
                 />
-                <div>
-                  <Link href="#" className="font-medium hover:underline">
-                    {cartItem.seller.name}
-                  </Link>
-                  <div className="text-sm text-gray-600">
-                    {cartItem.seller.rating}
-                  </div>
-                </div>
-              </div>
+              ))}
+            </div>
 
-              {/* Cart Item */}
-              <div className="flex gap-6">
-                <div className="w-32 h-32 relative">
-                  <Image
-                    src={cartItem.product.image || "/placeholder.svg"}
-                    alt={cartItem.product.title}
-                    fill
-                    className="object-cover rounded"
-                  />
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-start gap-4">
-                    <div>
-                      {cartItem.product.isLastOne && (
-                        <span className="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded mb-2">
-                          LAST ONE
-                        </span>
-                      )}
-                      <h3 className="font-medium hover:underline">
-                        <Link href="#">{cartItem.product.title}</Link>
-                      </h3>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium">
-                        US ${cartItem.product.price.toFixed(2)}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        + US ${cartItem.product.shipping.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <label htmlFor="quantity" className="text-sm">
-                        Qty
-                      </label>
-                      <select
-                        id="quantity"
-                        className="border rounded px-2 py-1 text-sm w-16"
-                      >
-                        <option>1</option>
-                        <option>2</option>
-                        <option>3</option>
-                        <option>4</option>
-                      </select>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      eBay International Shipping
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-4">
-                    <button className="text-blue-600 hover:underline text-sm">
-                      Save for later
-                    </button>
-                    <button className="text-blue-600 hover:underline text-sm">
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <button className="mt-6 text-blue-600 hover:underline text-sm flex items-center gap-1">
-                Request combined shipping
-                <Info className="w-4 h-4" />
-              </button>
+            {/* Cart Summary */}
+            <div className="lg:col-span-1">
+              <CartSummary cartData={cartData} />
             </div>
           </div>
+        )}
 
-          {/* Cart Summary */}
-          <div className="lg:col-span-1">
-            <div className="border rounded-lg p-6">
-              <div className="space-y-4">
-                <div className="flex justify-between">
-                  <span>Item (1)</span>
-                  <span>US ${cartItem.product.price.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-1">
-                    <span>Shipping to</span>
-                    <Info className="w-4 h-4 text-gray-400" />
-                  </div>
-                  <span>US ${cartItem.product.shipping.toFixed(2)}</span>
-                </div>
-                <div className="border-t pt-4">
-                  <div className="flex justify-between font-medium">
-                    <span>Subtotal</span>
-                    <span>
-                      US $
-                      {(
-                        cartItem.product.price + cartItem.product.shipping
-                      ).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <button className="w-full bg-blue-600 text-white rounded-full py-3 mt-6 hover:bg-blue-700">
-                Go to checkout
-              </button>
-
-              <div className="mt-4 flex items-center gap-2 text-sm">
-                <Image
-                  src="/placeholder.svg"
-                  alt="Protection"
-                  width={16}
-                  height={16}
-                />
-                <span>Purchase protected by</span>
-                <Link href="#" className="text-blue-600 hover:underline">
-                  eBay Money Back Guarantee
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Related Items */}
-        <section className="mt-12">
-          <h2 className="text-xl font-semibold mb-6">Explore related items</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {relatedItems.map((item, i) => (
-              <div key={i}>
-                <div className="aspect-square relative mb-3">
-                  <Image
-                    src={item.image || "/placeholder.svg"}
-                    alt={item.title}
-                    fill
-                    className="object-cover rounded"
-                  />
-                </div>
-                <h3 className="text-sm hover:underline">
-                  <Link href="#">{item.title}</Link>
-                </h3>
-                <div className="text-sm mt-1">{item.price}</div>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* Related Items section can be added here if needed */}
       </div>
     </div>
   );

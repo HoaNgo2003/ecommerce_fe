@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import type React from "react";
 import { SiteFooter } from "@/components/footer";
+import Script from "next/script";
 
 const inter = Inter({ subsets: ["latin"] });
 

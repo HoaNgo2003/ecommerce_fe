@@ -65,6 +65,7 @@ async function getProductData(category: string, id: string) {
     next: { revalidate: 60 },
   });
   if (!res.ok) {
+    console.log(res);
     throw new Error("Failed to fetch product data");
   }
   return res.json();
@@ -176,7 +177,7 @@ export default async function ProductDetail({
                 id: product.id.toString(),
                 name: product.name,
                 price: Number(product.price),
-                image: product.images[0] || "/placeholder.svg",
+                image: "/placeholder.svg",
               }}
             />
             <button className="w-full border py-3 rounded-full hover:bg-gray-100">
@@ -444,7 +445,7 @@ export default async function ProductDetail({
             <div key={i} className="group">
               <div className="relative aspect-square mb-3">
                 <Image
-                  src={item.image || "/placeholder.svg"}
+                  src={"/placeholder.svg"}
                   alt={item.title}
                   fill
                   className="object-cover rounded-lg"

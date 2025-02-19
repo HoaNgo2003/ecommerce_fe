@@ -2,10 +2,11 @@
 import type React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Bell, ChevronDown, LogOut, Search, ShoppingCart } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Search } from "lucide-react";
 import { useRouter } from "next/navigation"; // ✅ Correct for Next.js App Router
 
 import { useEffect, useState } from "react";
+import { CartIcon } from "@/components/CartIcon";
 
 export default function ProductLayout({
   children,
@@ -83,7 +84,7 @@ export default function ProductLayout({
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/ship-to">Ship to</Link>
+            <Link href="/order-tracking">Order list</Link>
             <Link href="/sell">Sell</Link>
             <Link href="/watchlist" className="flex items-center gap-1">
               Watchlist
@@ -91,7 +92,7 @@ export default function ProductLayout({
             </Link>
             <div className="flex items-center gap-4">
               <Bell className="h-5 w-5" />
-              <ShoppingCart className="h-5 w-5" />
+              <CartIcon />
             </div>
           </div>
         </div>

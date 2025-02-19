@@ -84,7 +84,7 @@ export default function Home() {
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/ship-to">Ship to</Link>
+            <Link href="/order-tracking">Order list</Link>
             <Link href="/sell">Sell</Link>
             <Link href="/watchlist" className="flex items-center gap-1">
               Watchlist

@@ -1,36 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import type React from "react";
+
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Info } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { PayPalButtons } from "@paypal/react-paypal-js";
 
-// Mock data - replace with real data from your cart/backend
-const orderDetails = {
-  seller: {
-    name: "St Luke Gardens-Anthropology Store",
-    rating: "100% positive feedback",
-    image: "/placeholder.svg",
-  },
-  item: {
-    title:
-      "Men's Vintage Nike All Court Shoes 8.5 Made In Taiwan 80s Canvas Blue Prop",
-    price: 300.0,
-    image: "/placeholder.svg",
-    quantity: 1,
-    isLastOne: true,
-  },
-  shipping: {
-    cost: 99.89,
-    method: "eBay International Shipping",
-    estimatedDelivery: {
-      start: "Mar 31",
-      end: "Apr 23",
-    },
-  },
-};
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+const SHIPPING_COST = 30;
+
+interface CartItem {
+  id: string;
+  quantity: number;
+  product_details: {
+    id: string;
+    name: string;
+    price: string;
+    description: string;
+    images: string[];
+    stock: number;
+  };
+}
+
+interface CartData {
+  id: string;
+  items: CartItem[];
+  total_price: number;
+}
 
 export default function CheckoutPage() {
+  const router = useRouter();
+  const [cartData, setCartData] = useState<CartData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [shippingForm, setShippingForm] = useState({
     country: "Vietnam",
     firstName: "",
@@ -48,10 +55,85 @@ export default function CheckoutPage() {
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    fetchCartData();
+  }, []);
+
+  const fetchCartData = async () => {
+    setIsLoading(true);
+    setError(null);
+    const cartId = localStorage.getItem("cart");
+    const parsedCartId: { id: string } | null = cartId
+      ? JSON.parse(cartId)
+      : null;
+    if (!cartId) {
+      setError("No cart found. Please add items to your cart.");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${apiUrl}/cart/carts/${parsedCartId?.id}/`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch cart data");
+      }
+
+      const data: CartData = await response.json();
+      setCartData(data);
+    } catch (err) {
+      setError("Failed to load cart data. Please try again." + err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const createOrder = async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        throw new Error("No access token found");
+      }
+      const customer = localStorage.getItem("customer");
+      if (!customer) {
+        throw new Error("No customer data found");
+      }
+      const parsedCustomer: { id: string } = JSON.parse(customer);
+      const response = await fetch(`${apiUrl}/order/orders/checkout/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          total_price: cartData ? cartData.total_price.toString() : "0",
+          status: "pending",
+          customer: parsedCustomer.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create order");
+      }
+
+      const data = await response.json();
+      return data.order;
+    } catch (error) {
+      console.error("Error creating order:", error);
+      throw error;
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setShippingForm((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
@@ -76,15 +158,134 @@ export default function CheckoutPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
-      // Process checkout
-      console.log("Processing checkout...");
+      try {
+        const token = localStorage.getItem("accessToken");
+        if (!token) {
+          throw new Error("No access token found");
+        }
+
+        const customerId = localStorage.getItem("customerId");
+        if (!customerId) {
+          throw new Error("No customer ID found");
+        }
+
+        const response = await fetch(`${apiUrl}/api/addresses/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            street: shippingForm.address1,
+            city: shippingForm.city,
+            state: shippingForm.state,
+            zip_code: shippingForm.zipCode,
+            country: shippingForm.country,
+            customer: customerId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to save address");
+        }
+
+        // Address saved successfully, proceed with payment
+        handlePayment();
+      } catch (error) {
+        console.error("Error saving address:", error);
+        setErrors({ submit: "Failed to save address. Please try again." });
+      }
     }
   };
 
-  const total = orderDetails.item.price + orderDetails.shipping.cost;
+  const handlePayment = async () => {
+    try {
+      const order = await createOrder();
+
+      if (selectedPayment === "paypal") {
+        // PayPal payment is handled by the PayPal button
+        console.log("PayPal payment selected, order created:", order);
+      } else if (selectedPayment === "cod") {
+        console.log("Processing COD payment, order created:", order);
+        // Here you would typically update the order status to "processing" or similar
+        // For now, we'll just simulate a successful order update
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        router.push(`/order-confirmation`);
+      } else {
+        throw new Error("Please select a payment method");
+      }
+    } catch (error) {
+      console.error("Error processing payment:", error);
+      setError("Failed to process payment. Please try again.");
+    }
+  };
+
+  const createPayPalOrder = (data: any, actions: any) => {
+    if (!cartData) {
+      throw new Error("Cart data is not available");
+    }
+    return actions.order.create({
+      purchase_units: [
+        {
+          amount: {
+            value: (cartData.total_price + SHIPPING_COST).toFixed(2),
+            breakdown: {
+              item_total: {
+                currency_code: "USD",
+                value: cartData.total_price.toFixed(2),
+              },
+              shipping: {
+                currency_code: "USD",
+                value: SHIPPING_COST.toFixed(2),
+              },
+            },
+          },
+        },
+      ],
+    });
+  };
+
+  const onApprove = async (data: any, actions: any) => {
+    try {
+      const order = await createOrder();
+      const paypalOrder = await actions.order.capture();
+      console.log("PayPal order captured:", paypalOrder);
+      // Here you would typically update the order status to "paid" or similar
+      // For now, we'll just simulate a successful order update
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      router.push(`/order-confirmation/${order.id}`);
+    } catch (error) {
+      console.error("Error capturing PayPal order:", error);
+      setError("Failed to process PayPal payment. Please try again.");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-red-500">
+        {error}
+      </div>
+    );
+  }
+
+  if (!cartData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        No items in cart
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -110,74 +311,57 @@ export default function CheckoutPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {error && (
+          <div
+            className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+            role="alert"
+          >
+            <span className="block sm:inline">{error}</span>
+          </div>
+        )}
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             {/* Order Review */}
             <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
               <h2 className="text-xl font-semibold mb-6">Review order</h2>
 
-              <div className="flex items-center gap-3 mb-6">
-                <Image
-                  src={orderDetails.seller.image || "/placeholder.svg"}
-                  alt={orderDetails.seller.name}
-                  width={40}
-                  height={40}
-                  className="rounded-full"
-                />
-                <div>
-                  <div className="font-medium">{orderDetails.seller.name}</div>
-                  <div className="text-sm text-gray-600">
-                    {orderDetails.seller.rating}
+              {cartData.items.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex gap-6 mb-6 pb-6 border-b last:border-b-0"
+                >
+                  <div className="w-24 h-24 relative">
+                    <Image
+                      src={"/placeholder.svg"}
+                      alt={item.product_details.name}
+                      fill
+                      className="object-cover rounded"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-medium">{item.product_details.name}</h3>
+                    <div className="mt-2">
+                      US $
+                      {Number.parseFloat(item.product_details.price).toFixed(2)}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      Quantity: {item.quantity}
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="flex gap-6">
-                <div className="w-24 h-24 relative">
-                  <Image
-                    src={orderDetails.item.image || "/placeholder.svg"}
-                    alt={orderDetails.item.title}
-                    fill
-                    className="object-cover rounded"
-                  />
-                </div>
-                <div className="flex-1">
-                  {orderDetails.item.isLastOne && (
-                    <span className="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded mb-2">
-                      LAST ONE
-                    </span>
-                  )}
-                  <h3 className="font-medium">{orderDetails.item.title}</h3>
-                  <div className="mt-2">
-                    US ${orderDetails.item.price.toFixed(2)}
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    Quantity {orderDetails.item.quantity}
-                  </div>
-                </div>
-              </div>
+              ))}
 
               <div className="mt-6 border-t pt-6">
                 <h3 className="font-medium mb-2">Delivery</h3>
                 <div className="text-sm text-gray-600">
-                  Est. delivery: {orderDetails.shipping.estimatedDelivery.start}{" "}
-                  - {orderDetails.shipping.estimatedDelivery.end}
-                </div>
-                <div className="text-sm text-gray-600">
-                  {orderDetails.shipping.method}
-                </div>
-                <div className="text-sm text-gray-600 mt-2">
-                  US ${orderDetails.shipping.cost.toFixed(2)}
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  Authorities may apply duties, fees, and taxes upon delivery
+                  Fixed shipping cost: US ${SHIPPING_COST.toFixed(2)}
                 </div>
               </div>
             </div>
 
             {/* Shipping Address */}
             <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-              <h2 className="text-xl font-semibold mb-6">Ship to</h2>
+              <h2 className="text-xl font-semibold mb-6">Order list</h2>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -379,13 +563,6 @@ export default function CheckoutPage() {
                     </div>
                   </div>
                 </div>
-
-                <button
-                  type="submit"
-                  className="w-24 bg-blue-600 text-white rounded-full py-2 hover:bg-blue-700"
-                >
-                  Done
-                </button>
               </form>
             </div>
 
@@ -396,37 +573,17 @@ export default function CheckoutPage() {
               <div className="space-y-4">
                 <button
                   className={`w-full border rounded-lg p-4 text-left flex justify-between items-center ${
-                    selectedPayment === "card" ? "border-blue-600" : ""
+                    selectedPayment === "cod" ? "border-blue-600" : ""
                   }`}
-                  onClick={() => setSelectedPayment("card")}
+                  onClick={() => setSelectedPayment("cod")}
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 border-2 rounded-full flex items-center justify-center">
-                      {selectedPayment === "card" && (
+                      {selectedPayment === "cod" && (
                         <div className="w-3 h-3 bg-blue-600 rounded-full" />
                       )}
                     </div>
-                    <span>Add new card</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Image
-                      src="/placeholder.svg"
-                      alt="Visa"
-                      width={32}
-                      height={20}
-                    />
-                    <Image
-                      src="/placeholder.svg"
-                      alt="Mastercard"
-                      width={32}
-                      height={20}
-                    />
-                    <Image
-                      src="/placeholder.svg"
-                      alt="Discover"
-                      width={32}
-                      height={20}
-                    />
+                    <span>Cash on Delivery (COD)</span>
                   </div>
                 </button>
 
@@ -451,26 +608,14 @@ export default function CheckoutPage() {
                   </div>
                 </button>
 
-                <button
-                  className={`w-full border rounded-lg p-4 text-left flex justify-between items-center ${
-                    selectedPayment === "apple" ? "border-blue-600" : ""
-                  }`}
-                  onClick={() => setSelectedPayment("apple")}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 border-2 rounded-full flex items-center justify-center">
-                      {selectedPayment === "apple" && (
-                        <div className="w-3 h-3 bg-blue-600 rounded-full" />
-                      )}
-                    </div>
-                    <Image
-                      src="/placeholder.svg"
-                      alt="Apple Pay"
-                      width={80}
-                      height={20}
+                {selectedPayment === "paypal" && (
+                  <div className="mt-4">
+                    <PayPalButtons
+                      createOrder={createPayPalOrder}
+                      onApprove={onApprove}
                     />
                   </div>
-                </button>
+                )}
               </div>
 
               <div className="mt-6">
@@ -493,24 +638,27 @@ export default function CheckoutPage() {
             <div className="bg-white rounded-lg shadow-sm p-6 sticky top-4">
               <div className="space-y-4">
                 <div className="flex justify-between">
-                  <span>Item (1)</span>
-                  <span>US ${orderDetails.item.price.toFixed(2)}</span>
+                  <span>Items ({cartData.items.length})</span>
+                  <span>US ${cartData.total_price.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Shipping</span>
-                  <span>US ${orderDetails.shipping.cost.toFixed(2)}</span>
+                  <span>US ${SHIPPING_COST.toFixed(2)}</span>
                 </div>
                 <div className="border-t pt-4">
                   <div className="flex justify-between font-medium">
                     <span>Order total</span>
-                    <span>US ${total.toFixed(2)}</span>
+                    <span>
+                      US ${(cartData.total_price + SHIPPING_COST).toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>
 
               <button
-                className="w-full bg-gray-300 text-gray-700 rounded-full py-3 mt-6 hover:bg-gray-400 disabled:opacity-50"
+                className="w-full bg-blue-600 text-white rounded-full py-3 mt-6 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={!selectedPayment}
+                onClick={handlePayment} // Updated onClick handler
               >
                 Confirm and pay
               </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ChevronLeft,
   MessageCircle,
@@ -9,82 +9,79 @@ import {
   Bell,
   Ticket,
   Coins,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 
-const orderStatuses = [
-  {
-    title: "Order Placed",
-    date: "17-06-2022",
-    time: "17:35",
-    completed: true,
-    icon: "📝",
-  },
-  {
-    title: "Order Paid",
-    date: "18-06-2022",
-    time: "17:00",
-    completed: true,
-    icon: "💳",
-  },
-  {
-    title: "Order Shipped Out",
-    date: "19-06-2022",
-    time: "10:04",
-    completed: true,
-    icon: "🚚",
-  },
-  {
-    title: "Order Received",
-    date: "21-06-2022",
-    time: "08:22",
-    completed: true,
-    icon: "📦",
-  },
-  {
-    title: "Order Completed",
-    date: "21-06-2022",
-    time: "23:59",
-    completed: true,
-    icon: "⭐",
-  },
-];
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-const trackingUpdates = [
-  {
-    date: "22-06-2022",
-    time: "10:44",
-    status: "Delivered",
-    description: "Package has been delivered to recipient",
-    isCompleted: true,
-  },
-  {
-    date: "22-06-2022",
-    time: "07:31",
-    status: "In transit",
-    description: "Package is in transit to delivery location",
-    isCompleted: true,
-  },
-  {
-    date: "22-06-2022",
-    time: "04:45",
-    status: "Processing",
-    description: "Package is being processed at HKGKM - facility",
-    isCompleted: true,
-  },
-];
+interface OrderItem {
+  id: string;
+  product_name: string;
+  quantity: number;
+  price_item: string;
+}
 
-export default function OrderTrackingPage() {
-  const [showAllUpdates, setShowAllUpdates] = useState(false);
-  const displayedUpdates = showAllUpdates
-    ? trackingUpdates
-    : trackingUpdates.slice(0, 3);
-  const orderId = "220610H31F2Y7";
+interface Order {
+  id: string;
+  items: OrderItem[];
+  created_at: string;
+  total_price: string;
+  status: string;
+}
+
+export default function OrdersPage() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const token = localStorage.getItem("accessToken");
+        const customerData = localStorage.getItem("customer");
+        const customerId: { id: string } | null = customerData
+          ? JSON.parse(customerData)
+          : null;
+        if (!token || !customerId) {
+          throw new Error("Authentication information missing");
+        }
+
+        const response = await fetch(
+          `${apiUrl}/order/orders/customer_orders?customer_id=${customerId?.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch orders");
+        }
+
+        const data = await response.json();
+        setOrders(data);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "An error occurred while fetching orders"
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Left Sidebar */}
-      <div className="w-64 bg-white border-r hidden md:block">
+      {/* <div className="w-64 bg-white border-r hidden md:block">
         <div className="p-4">
           <nav className="space-y-1">
             <Link
@@ -124,7 +121,7 @@ export default function OrderTrackingPage() {
             </Link>
           </nav>
         </div>
-      </div>
+      </div> */}
 
       {/* Main Content */}
       <div className="flex-1">
@@ -133,141 +130,76 @@ export default function OrderTrackingPage() {
           <div className="container mx-auto px-4">
             <div className="h-14 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <Link
-                  href="/orders"
-                  className="flex items-center text-gray-600"
-                >
+                <Link href="/" className="flex items-center text-gray-600">
                   <ChevronLeft className="h-5 w-5" />
                   <span>BACK</span>
                 </Link>
-                <div className="text-sm">
-                  ORDER ID: <span className="font-medium">{orderId}</span>
-                </div>
-              </div>
-              <div className="text-sm font-medium text-green-600">
-                ORDER COMPLETED
+                <h1 className="text-xl font-semibold">My Orders</h1>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Horizontal Line */}
-        <div className="border-b border-gray-200" />
-
+        {/* Orders List */}
         <div className="container mx-auto px-4 py-6">
-          {/* Order Status Timeline */}
-          <div className="bg-white rounded p-6 mb-4">
-            <div className="relative">
-              <div className="flex justify-between mb-6">
-                {orderStatuses.map((status, index) => (
-                  <div
-                    key={index}
-                    className="flex flex-col items-center relative z-10"
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm
-                      ${
-                        status.completed
-                          ? "bg-green-500 text-white"
-                          : "bg-gray-200"
+          {isLoading && <div className="text-center">Loading orders...</div>}
+          {error && <div className="text-center text-red-500">{error}</div>}
+          {!isLoading && !error && orders.length === 0 && (
+            <div className="text-center">No orders found.</div>
+          )}
+          {!isLoading && !error && orders.length > 0 && (
+            <div className="space-y-4">
+              {orders.map((order) => (
+                <div key={order.id} className="bg-white rounded-lg shadow p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-semibold">Order #{order.id}</h2>
+                    <span className="text-sm font-medium text-gray-500">
+                      {new Date(order.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {order.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex justify-between items-center"
+                      >
+                        <span>
+                          {item.product_name} x{item.quantity}
+                        </span>
+                        <span>${Number(item.price_item).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex justify-between items-center">
+                    <span className="font-medium">Total:</span>
+                    <span className="font-medium">
+                      ${Number(order.total_price).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="mt-4 flex justify-between items-center">
+                    <span
+                      className={`text-sm font-medium ${
+                        order.status === "completed"
+                          ? "text-green-500"
+                          : order.status === "pending"
+                          ? "text-yellow-500"
+                          : "text-gray-500"
                       }`}
                     >
-                      {status.icon}
-                    </div>
-                    <div className="text-[11px] mt-2 text-center">
-                      <div className="font-medium">{status.title}</div>
-                      <div className="text-gray-500">{status.date}</div>
-                      <div className="text-gray-500">{status.time}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {/* Connection line */}
-              <div className="absolute top-4 left-0 right-0 h-[1px] bg-green-500 -z-10" />
-            </div>
-          </div>
-
-          {/* Horizontal Line */}
-          <div className="border-b border-gray-200 mb-4" />
-
-          {/* Thank you message */}
-          <div className="text-center text-sm text-gray-600 mb-4">
-            Thank you for shopping with Shopee!
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-col gap-2 mb-4">
-            <button className="bg-orange-500 text-white py-2 rounded hover:bg-orange-600">
-              Buy Again
-            </button>
-            <button className="border border-gray-300 py-2 rounded hover:bg-gray-50">
-              Contact Seller
-            </button>
-          </div>
-
-          {/* Dashed line separator */}
-          <div className="h-4 relative mb-4">
-            <div className="absolute inset-0 flex">
-              {Array.from({ length: 20 }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-[1px] flex-1 ${
-                    i % 2 === 0 ? "bg-blue-200" : "bg-pink-200"
-                  }`}
-                  style={{ margin: "0 2px" }}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Tracking Information */}
-          <div className="bg-white rounded p-4">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="font-medium">Delivery Address</h2>
-              <div className="text-sm">
-                <span className="text-gray-500">Tracking ID: </span>
-                <span className="text-orange-500 font-medium">
-                  SPX-SPXTH20244404926
-                </span>
-              </div>
-            </div>
-
-            {/* Tracking Updates */}
-            <div className="space-y-4">
-              {displayedUpdates.map((update, index) => (
-                <div key={index} className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                    {index !== displayedUpdates.length - 1 && (
-                      <div className="w-[1px] h-full bg-gray-200" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between text-sm">
-                      <div className="font-medium text-green-600">
-                        {update.status}
-                      </div>
-                      <div className="text-gray-500">
-                        {update.date} {update.time}
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {update.description}
-                    </div>
+                      {order.status.toUpperCase()}
+                    </span>
+                    <Link
+                      href={`/orders/${order.id}`}
+                      className="text-blue-500 hover:underline flex items-center"
+                    >
+                      View Details
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Link>
                   </div>
                 </div>
               ))}
             </div>
-
-            {trackingUpdates.length > 3 && (
-              <button
-                onClick={() => setShowAllUpdates(!showAllUpdates)}
-                className="text-blue-600 hover:underline mt-4 text-sm"
-              >
-                {showAllUpdates ? "Show Less" : "See More"}
-              </button>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Chat Button */}
